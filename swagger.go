@@ -1,12 +1,14 @@
-package fastHttpSwagger
+package atreugoswagger
 
 import (
+	"errors"
 	"html/template"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 
+	"github.com/savsgio/atreugo/v11"
 	swaggerFiles "github.com/swaggo/files/v2"
 	"github.com/swaggo/swag"
 	"github.com/valyala/fasthttp"
@@ -83,7 +85,7 @@ func InstanceName(name string) func(c *Config) {
 }
 
 // WrapHandler wraps `http.Handler` into `gin.HandlerFunc`.
-func WrapHandler(confs ...func(c *Config)) fasthttp.RequestHandler {
+func WrapHandler(confs ...func(c *Config)) atreugo.View {
 	defaultConfig := &Config{
 		URL:                      "doc.json",
 		DeepLinking:              true,
@@ -100,7 +102,7 @@ func WrapHandler(confs ...func(c *Config)) fasthttp.RequestHandler {
 }
 
 // CustomWrapHandler wraps `http.Handler` into `gin.HandlerFunc`
-func CustomWrapHandler(config *Config) fasthttp.RequestHandler {
+func CustomWrapHandler(config *Config) atreugo.View {
 	if config.InstanceName == "" {
 		config.InstanceName = swag.Name
 	}
@@ -111,13 +113,11 @@ func CustomWrapHandler(config *Config) fasthttp.RequestHandler {
 
 	var rexp = regexp.MustCompile(`(.*)(index\.html|doc\.json|favicon-16x16\.png|favicon-32x32\.png|/oauth2-redirect\.html|swagger-ui\.css|swagger-ui\.css\.map|swagger-ui\.js|swagger-ui\.js\.map|swagger-ui-bundle\.js|swagger-ui-bundle\.js\.map|swagger-ui-standalone-preset\.js|swagger-ui-standalone-preset\.js\.map)[\?|.]*`)
 
-	return func(ctx *fasthttp.RequestCtx) {
+	return func(ctx *atreugo.RequestCtx) error {
 		matches := rexp.FindStringSubmatch(string(ctx.RequestURI()))
 
 		if len(matches) != 3 {
-			ctx.SetStatusCode(http.StatusNotFound)
-			ctx.Response.SetBodyRaw([]byte("404 page not found"))
-			return
+			return ctx.ErrorResponse(errors.New("404 page not found"), http.StatusNotFound)
 		}
 
 		path := matches[2]
@@ -141,25 +141,26 @@ func CustomWrapHandler(config *Config) fasthttp.RequestHandler {
 		case "doc.json":
 			doc, err := swag.ReadDoc(config.InstanceName)
 			if err != nil {
-				ctx.Response.SetStatusCode(http.StatusInternalServerError)
-				return
+				return ctx.ErrorResponse(err, http.StatusInternalServerError)
 			}
 			ctx.Response.SetBodyRaw([]byte(doc))
 		default:
-			fasthttp.ServeFS(ctx, swaggerFiles.FS, path)
+			fasthttp.ServeFS(ctx.RequestCtx, swaggerFiles.FS, path)
 		}
+
+		return nil
 	}
 }
 
 // DisablingWrapHandler turn handler off
 // if specified environment variable passed
-func DisablingWrapHandler(envName string) fasthttp.RequestHandler {
+func DisablingWrapHandler(envName string) atreugo.View {
 	eFlag := os.Getenv(envName)
 	if eFlag != "" {
-		return func(ctx *fasthttp.RequestCtx) {
+		return func(ctx *atreugo.RequestCtx) error {
 			// Simulate behavior when route unspecified and
 			// return 404 HTTP code
-			ctx.SetStatusCode(http.StatusNotFound)
+			return ctx.ErrorResponse(errors.New("404 page not found"), http.StatusNotFound)
 		}
 	}
 
@@ -168,13 +169,13 @@ func DisablingWrapHandler(envName string) fasthttp.RequestHandler {
 
 // DisablingCustomWrapHandler turn handler off
 // if specified environment variable passed
-func DisablingCustomWrapHandler(config *Config, envName string) fasthttp.RequestHandler {
+func DisablingCustomWrapHandler(config *Config, envName string) atreugo.View {
 	eFlag := os.Getenv(envName)
 	if eFlag != "" {
-		return func(ctx *fasthttp.RequestCtx) {
+		return func(ctx *atreugo.RequestCtx) error {
 			// Simulate behavior when route unspecified and
 			// return 404 HTTP code
-			ctx.SetStatusCode(http.StatusNotFound)
+			return ctx.ErrorResponse(errors.New("404 page not found"), http.StatusNotFound)
 		}
 	}
 

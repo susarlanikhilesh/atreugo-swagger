@@ -1,4 +1,4 @@
-package fastHttpSwagger
+package atreugoswagger
 
 import (
 	"testing"
